@@ -69,7 +69,6 @@ class GraphVisualization:
         lookup_object_by_coords = {i.coordinates: i for i in self.graph}
         @cursor.connect("add")
         def _(sel):
-            print("dong")
             coords, node_value = onlick_return_coordinates(sel, lookup_object_by_coords)
             self.on_click(coords=coords, node_value=node_value)
 
@@ -114,12 +113,12 @@ class GraphVisualization:
             if "edgelist" in kwargs:
                 raise TypeError("must not provide edgelist and filter_fun together")
             kwargs["edgelist"] = [filter_fun(*uvdata) for uvdata in self.graph.edges(data=True)]
-        nx.draw_networkx_edges(self.graph, self.pos, **kwargs)
+        nx.draw_networkx_edges(self.graph, self.pos, ax=self.ax, **kwargs)
 
     def draw_labels(self, **kwargs):
         if self.disable_labels:
             return
-        nx.draw_networkx_labels(self.graph, self.pos, **kwargs)
+        nx.draw_networkx_labels(self.graph, self.pos, ax=self.ax, **kwargs)
 
     def draw_nodes(self, *, filter_fun=None, **kwargs):
         if "node_size" not in kwargs:
@@ -128,7 +127,7 @@ class GraphVisualization:
             if "nodelist" in kwargs:
                 raise TypeError("must not provide nodelist and filter_fun together")
             kwargs["nodelist"] = list(filter(filter_fun, self.graph))
-        nx.draw_networkx_nodes(self.graph, self.pos, **kwargs)
+        nx.draw_networkx_nodes(self.graph, self.pos, ax=self.ax, **kwargs)
 
     def on_click(self, coords, node_value):
         pass
@@ -156,7 +155,7 @@ class MeshViz(GraphVisualization):
         )
         self.draw_labels()
         if self.nan_graph is not None:
-            nx.draw_networkx_edges(self.nan_graph, self.pos, edge_color='y', alpha=0.7)
+            nx.draw_networkx_edges(self.nan_graph, self.pos, ax=self.ax, edge_color='y', alpha=0.7)
         self.draw_edges(
             edge_color='b',
             alpha=0.7
@@ -188,7 +187,6 @@ class MeasurementsViz(MeshViz):
         self.step = 1
 
     def on_click(self, coords, node_value):
-        print("!!", node_value)
         show_saturation_history(coords, node_value)
 
     def spo2_to_color(self, value):
@@ -234,7 +232,7 @@ class MeasurementsViz(MeshViz):
         self.__draw_nodes()
         self.draw_labels()
         if self.nan_graph is not None:
-            nx.draw_networkx_edges(self.nan_graph, self.pos, edge_color='y', alpha=0.7)
+            nx.draw_networkx_edges(self.nan_graph, self.pos, ax=self.ax, edge_color='y', alpha=0.7)
         self.draw_edges(
             edge_color='b',
             alpha=0.7
@@ -277,9 +275,8 @@ def path_onclick_wrapper(node_collection, node_value, graph):
 
 
 def show_saturation_history(coords, node_value):
-    
-    data = [99, 100, 100, 99, 98, 97, 97, 96, 95, 94]
-    x_ticks = [i for i in range(1, 11)]
+    data = [m.value for m in node_value.get_measurements('spo2')]
+    x_ticks = [m.timestamp for m in node_value.get_measurements('spo2')]
 
     fig, ax = plt.subplots()
 
@@ -287,7 +284,10 @@ def show_saturation_history(coords, node_value):
     ax.axhline(95, ls='--', color='yellow')
 
     ax.bar(x_ticks, data, color='royalblue')
-    ax.yaxis.set_ticks([i for i in range(0, 110, 10)])
+    ax.set_title(f"SpO2 of patient#{node_value.patient.id} against time")
+    ax.set_ylabel("%")
+    ax.set_ylim(50, 100)
+    ax.yaxis.set_ticks(list(range(50, 110, 10)))
     ax.xaxis.set_ticks(x_ticks)
 
     plt.show()
@@ -407,7 +407,7 @@ def simulation_plot(variant, input_path):
             disable_labels=True,
             grid_size=matrix_size,
             nan_graph=nan_graph
-        ).animate(redraws_per_second=5)
+        ).animate(redraws_per_second=4, duration=20)
 
 
 if __name__ == "__main__":
