@@ -31,15 +31,20 @@ class RttMeasurer(
     private val novaController: NovaController
 ) {
 
-    private companion object{
+    private companion object {
         private const val LIMIT_OF_FAILED_REQUEST = 1
         private const val RTT_TAG = "JSON_RTT"
     }
 
-    @Volatile private var startTime = 1L
+    @Volatile
+    private var startTime = 1L
     private val isAlarm = AtomicBoolean()
 
-    @Volatile private var lastRttResultsJson = ""
+    @Volatile
+    private var currentDistanceInfo = DistanceInfo(phoneInfo.phoneID, phoneInfo.phoneName, ArrayList(),false, 1, 1 )
+
+    @Volatile
+    private var lastRttResultsJson = ""
     private val rttResultsMap = ConcurrentHashMap<String, DistanceInfo>()
     private val rttMapType: Type = object : TypeToken<Map<String?, DistanceInfo?>?>() {}.type
     private val numberOfSucceedRangingRequests: AtomicInteger = AtomicInteger(0)
@@ -47,7 +52,8 @@ class RttMeasurer(
     private val rttRequestQueue = ConcurrentLinkedQueue<RangingRequestElement>()
 
     private val executor = Executors.newCachedThreadPool()
-    @Volatile private var numberOfRequests: AtomicInteger = AtomicInteger(0)
+    @Volatile
+    private var numberOfRequests: AtomicInteger = AtomicInteger(0)
 
     internal fun getRttResultsMap(): String = Gson().toJson(rttResultsMap)
 
@@ -71,16 +77,30 @@ class RttMeasurer(
     }
 
     @Synchronized
-    private fun addVirtualDevicesMeasures(info: DistanceInfo) = novaController.getVirtualDevices(info).forEach { rttResultsMap[it.value.phoneId] = it.value }
+    private fun addVirtualDevicesMeasures(info: DistanceInfo) =
+        novaController.getVirtualDevices(info)
+            .forEach { rttResultsMap[it.value.phoneId] = it.value }
 
-    private fun logDistance(distanceInfo: DistanceInfo){
+    @Synchronized
+    fun updateVirtualDevicesMeasures(generatedMap: HashMap<String, DistanceInfo>) {
+        generatedMap.forEach { rttResultsMap[it.value.phoneId] = it.value }
+        logAllDistances()
+        novaController.updatePulseTable(rttResultsMap)
+    }
+
+    fun getCurrentDistanceInfo() = currentDistanceInfo
+    fun updateCurrentDevice (pulseValue: Int, pulseOxValue: Int) {
+        currentDistanceInfo = DistanceInfo(currentDistanceInfo, isAlarm.get(), pulseValue, pulseOxValue)
+    }
+
+    private fun logDistance(distanceInfo: DistanceInfo) {
         val jsonRtt = convertDistanceInfoToJsonString(distanceInfo)
         Log.w(RTT_TAG, jsonRtt)
     }
 
-    private fun logAllDistances(){
+    private fun logAllDistances() {
         Log.w(RTT_TAG, "StartJson")
-        rttResultsMap.forEach{ logDistance(it.value) }
+        rttResultsMap.forEach { logDistance(it.value) }
     }
 
     fun setAlarm(value: Boolean): DistanceInfo? {
@@ -115,16 +135,21 @@ class RttMeasurer(
         numberOfRequests.set(numberOfProcessingRequests)
     }
 
-    private fun prepareAndExecuteRttRequests(macMap: HashMap<String, String>, distances: HashMap<String, ArrayList<Int>>): Int {
+    private fun prepareAndExecuteRttRequests(
+        macMap: HashMap<String, String>,
+        distances: HashMap<String, ArrayList<Int>>
+    ): Int {
         val reqList = createRttRequestsForPhonesFromMACs(macMap.keys)
         reqList.forEach { rttRequestQueue.add(RangingRequestElement(it, macMap)) }
         executeNextRttRequest(distances)
         return reqList.size
     }
 
-    private fun executeNextRttRequest(distances: HashMap<String, ArrayList<Int>>){
-        rttRequestQueue.poll()?.let { reqEl -> startRttRanging(reqEl.request, wifiRttManager, distances, reqEl.macMap)
-            Log.w(COMPUTER_COMMUNICATION_TAG, "requested")}
+    private fun executeNextRttRequest(distances: HashMap<String, ArrayList<Int>>) {
+        rttRequestQueue.poll()?.let { reqEl ->
+            startRttRanging(reqEl.request, wifiRttManager, distances, reqEl.macMap)
+            Log.w(COMPUTER_COMMUNICATION_TAG, "requested")
+        }
     }
 
 
@@ -140,12 +165,18 @@ class RttMeasurer(
             object : RangingResultCallback() {
                 override fun onRangingResults(results: List<RangingResult>) {
                     numberOfSucceedRangingRequests.incrementAndGet()
-                    Log.w(COMPUTER_COMMUNICATION_TAG, "Succeed request ${numberOfFailedRangingRequests.get()}")
+                    Log.w(
+                        COMPUTER_COMMUNICATION_TAG,
+                        "Succeed request ${numberOfFailedRangingRequests.get()}"
+                    )
                     processRangingResults(results, distances, macMap)
                 }
 
                 override fun onRangingFailure(code: Int) {
-                    Log.w(COMPUTER_COMMUNICATION_TAG, "Failed request ${numberOfFailedRangingRequests.get()}")
+                    Log.w(
+                        COMPUTER_COMMUNICATION_TAG,
+                        "Failed request ${numberOfFailedRangingRequests.get()}"
+                    )
 
                     numberOfFailedRangingRequests.incrementAndGet()
                     when {
@@ -179,7 +210,7 @@ class RttMeasurer(
             }
         }
         Log.w(TAG, "rtt length : ${distances.size}")
-        if(failedRequestsMacMap.isNotEmpty()){
+        if (failedRequestsMacMap.isNotEmpty()) {
             numberOfFailedRangingRequests.incrementAndGet()
             numberOfSucceedRangingRequests.decrementAndGet()
         }
@@ -195,9 +226,9 @@ class RttMeasurer(
     }
 
     private fun ifRttMeasurementFinished(): Boolean =
-        numberOfSucceedRangingRequests.get() + numberOfFailedRangingRequests.get()  == numberOfRequests.get() +
-                LIMIT_OF_FAILED_REQUEST * if(numberOfFailedRangingRequests.get() < numberOfRequests.get())
-                numberOfFailedRangingRequests.get() else numberOfRequests.get()
+        numberOfSucceedRangingRequests.get() + numberOfFailedRangingRequests.get() == numberOfRequests.get() +
+                LIMIT_OF_FAILED_REQUEST * if (numberOfFailedRangingRequests.get() < numberOfRequests.get())
+            numberOfFailedRangingRequests.get() else numberOfRequests.get()
 
     private fun sendRttResultsToServerSocket(distances: HashMap<String, ArrayList<Int>>) {
         val distanceList = ArrayList<DistanceElement>()
@@ -213,9 +244,15 @@ class RttMeasurer(
             //view.appendToServerTextField("$k ${average}mm")
             distanceList.add(distanceElement)
         }
-        val info = DistanceInfo(phoneInfo.phoneID, phoneInfo.phoneName, distanceList, isAlarm.get(), novaController.getPulse(), novaController.getPulseOx())
+        val info = DistanceInfo(
+            phoneInfo.phoneID,
+            phoneInfo.phoneName,
+            distanceList,
+            isAlarm.get(),
+            novaController.getPulse(),
+            novaController.getPulseOx()
+        )
         novaController.setDistanceInfoView(info)
-        //rttResultsMap[info.phoneId] = info
         lastRttResultsJson = convertDistanceInfoToJsonString(info)
         addVirtualDevicesMeasures(info)
 
@@ -250,8 +287,11 @@ class RttMeasurer(
     }
 
     fun close() {
-       executor.shutdownNow()
+        executor.shutdownNow()
     }
 
-    private data class RangingRequestElement(val request: RangingRequest, val macMap: HashMap<String, String>)
+    private data class RangingRequestElement(
+        val request: RangingRequest,
+        val macMap: HashMap<String, String>
+    )
 }

@@ -20,21 +20,19 @@ import androidx.fragment.app.Fragment
 import com.samsung.sel.cqe.nova.R
 import com.samsung.sel.cqe.nova.main.controller.NovaController
 import com.samsung.sel.cqe.nova.main.controller.PhoneStatus
-import com.samsung.sel.cqe.nova.main.map.MapFragment
 import com.samsung.sel.cqe.nova.main.utils.DistanceElement
 
 class NovaFragment(
-    val tableFragment: TabsActivity
+    val tableFragment: TableFragment
 ) : Fragment() {
 
-//    private lateinit var novaController: NovaController
+    private lateinit var novaController: NovaController
 
     private val distanceHeader: TextView by lazy { activity!!.findViewById<TextView>(R.id.distanceHeader) }
     private val pulseHeader: TextView by lazy { activity!!.findViewById<TextView>(R.id.pulseHeader) }
 
     private val pulseTitle: TextView by lazy { activity!!.findViewById<TextView>(R.id.pulseTitle) }
     private val pulseValueView: TextView by lazy { activity!!.findViewById<TextView>(R.id.pulseValue) }
-
     private val pulseOxTitle: TextView by lazy { activity!!.findViewById<TextView>(R.id.pulseOxTitle) }
     private val pulseOxValueView: TextView by lazy { activity!!.findViewById<TextView>(R.id.pulseOxValue) }
 
@@ -43,6 +41,8 @@ class NovaFragment(
     private val phoneDistance1: TextView by lazy { activity!!.findViewById<TextView>(R.id.phoneDistance1) }
     private val phoneDistance2: TextView by lazy { activity!!.findViewById<TextView>(R.id.phoneDistance2) }
 
+    private val deviceCountTitle: TextView by lazy { activity!!.findViewById<TextView>(R.id.deviceCountTitle) }
+    private val deviceCountView: TextView by lazy { activity!!.findViewById<TextView>(R.id.deviceCountView) }
 
     private val statusText: TextView by lazy { activity!!.findViewById<TextView>(R.id.status_view) }
     private val phoneNameView: TextView by lazy { activity!!.findViewById<TextView>(R.id.phoneName) }
@@ -61,14 +61,11 @@ class NovaFragment(
         val phoneID =
             Settings.Secure.getString(activity?.contentResolver, Settings.Secure.ANDROID_ID)
         val phoneName = Settings.Global.getString(activity?.contentResolver, "device_name")
-//        novaController = NovaController(this, phoneID, phoneName,tableFragment,mapFragment)
+        novaController = NovaController(this, phoneID, phoneName,tableFragment)
         initStatusTextView()
         initDistanceAndPulseViews()
         initAlarmButton()
-        setPulseInfoView(
-            tableFragment.pulseMeasurer.getPulse(),
-            tableFragment.pulseMeasurer.getPulseOx()
-        )
+        initDeviceCountViews()
     }
 
     private fun initAlarmButton() {
@@ -77,8 +74,7 @@ class NovaFragment(
         alarmButton.setTextColor(Color.WHITE)
         alarmButton.setBackgroundColor(Color.rgb(156, 255, 153))
         alarmButton.setOnClickListener {
-//            novaController.startAlarm()
-//            tableFragment.setAlarm()
+            novaController.startAlarm()
             alarmButton.setBackgroundColor(Color.RED)
             val fadeAnim = AnimationUtils.loadAnimation(context, R.anim.fade)
             it.startAnimation(fadeAnim)
@@ -89,6 +85,12 @@ class NovaFragment(
         statusText.gravity = Gravity.CENTER
         statusText.setBackgroundColor(Color.GREEN)
         statusText.textSize = SMALL_TEXT_SIZE
+    }
+
+    private fun initDeviceCountViews() {
+        setTextViewStyle(deviceCountTitle)
+        setTextViewStyle(deviceCountView)
+        deviceCountTitle.text = "Devices Local / Devices"
     }
 
     private fun initDistanceAndPulseViews() {
@@ -115,7 +117,7 @@ class NovaFragment(
 
     }
 
-    fun setTextViewStyle(textView: TextView) {
+    private fun setTextViewStyle(textView: TextView) {
         textView.textSize = SMALL_TEXT_SIZE
     }
 
@@ -125,6 +127,12 @@ class NovaFragment(
         phoneNameView.text = phoneName
         phoneNameView.gravity = Gravity.CENTER
     }
+
+
+    fun setDeviceCountView(deviceCount: Int, deviceCountLocal: Int) = activity?.runOnUiThread {
+        deviceCountView.text = "$deviceCountLocal / $deviceCount"
+    }
+
 
     fun setDistanceInfoView(list: List<DistanceElement>) = activity?.runOnUiThread {
         if (list.isNotEmpty()) {
@@ -250,7 +258,7 @@ class NovaFragment(
     override fun onStop() {
         super.onStop()
         Log.w(TAG, "onSTOP")
-//        novaController.close()
+        novaController.close()
 
     }
 

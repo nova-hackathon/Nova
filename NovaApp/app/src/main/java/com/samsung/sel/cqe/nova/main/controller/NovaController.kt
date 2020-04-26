@@ -12,7 +12,6 @@ import com.samsung.sel.cqe.nova.main.NovaFragment
 import com.samsung.sel.cqe.nova.main.TAG
 import com.samsung.sel.cqe.nova.main.TableFragment
 import com.samsung.sel.cqe.nova.main.aware.AwareService
-import com.samsung.sel.cqe.nova.main.map.MapFragment
 import com.samsung.sel.cqe.nova.main.pulse.PulseMeasurer
 import com.samsung.sel.cqe.nova.main.rtt.RttMeasurer
 import com.samsung.sel.cqe.nova.main.rtt.VirtualDevices
@@ -35,8 +34,7 @@ class NovaController(
     private val view: NovaFragment,
     private val phoneID: String,
     val phoneName: String,
-    private val tableFragment: TableFragment,
-    val mapFragment: MapFragment
+    private val tableFragment: TableFragment
 ) {
     private val awareService: AwareService
     private val novaSync: NovaSync
@@ -44,7 +42,7 @@ class NovaController(
     private val phoneInfo = createPhoneInfo()
     private val rttMeasurer: RttMeasurer
     val pulseMeasurer: PulseMeasurer
-    private val virtualDevices: VirtualDevices by lazy { VirtualDevices(PulseMeasurer(null)) }
+    private val virtualDevices: VirtualDevices
     private val wifiRttManager: WifiRttManager by lazy { view.getWifiRttManager() }
 
     val connectivityManager: ConnectivityManager by lazy { view.getConnectivityManager() }
@@ -62,9 +60,11 @@ class NovaController(
         novaSync = NovaSync(this, phoneInfo)
         rttMeasurer = RttMeasurer(view, wifiRttManager, phoneInfo, this)
         pulseMeasurer = PulseMeasurer(this)
+        virtualDevices = VirtualDevices(this, phoneInfo)
         socketService = SocketService(phoneInfo, this, view)
         view.setStatusOnTextView(phoneInfo.status, phoneInfo.masterId)
         view.initPhoneNameView("$phoneName")
+        setDeviceCountView()
 
         phoneInfo.assignClusterInfo(activeIndependentCluster)
     }
@@ -435,6 +435,7 @@ class NovaController(
     fun setPulseInfoView(pulseValue: Int, pulseOxValue: Int) {
         view.setPulseInfoView(pulseValue, pulseOxValue)
     }
+    fun setDeviceCountView(deviceCount: Int = 0, defaultDeviceCount: Int = 1) = view.setDeviceCountView((defaultDeviceCount + deviceCount) * VirtualDevices.DEVICE_COUNT_LOCAL, VirtualDevices.DEVICE_COUNT_LOCAL)
 
     fun startAlarm() {
         pulseMeasurer.startAlarm()
@@ -448,10 +449,6 @@ class NovaController(
     fun getPulseOx() = pulseMeasurer.getPulseOx()
 
     fun onAlarmDiscovered(sentDistanceInfo: DistanceInfo) {
-        Log.w(
-            "ALARM",
-            "ALARM on ${sentDistanceInfo.phoneName} + ${sentDistanceInfo.pulse} + ${sentDistanceInfo.pulseOx}"
-        )
         view.showOnUiThread("ALARM ${sentDistanceInfo.phoneName}", Toast.LENGTH_LONG)
     }
 
@@ -459,11 +456,14 @@ class NovaController(
         view.activity?.runOnUiThread {
             tableFragment.updateTable(rttAndPulse.values)
         }
-        mapFragment.updateMap(rttAndPulse)
     }
 
     fun getVirtualDevices(actualDevicesMeasure: DistanceInfo?) =
         virtualDevices.getVirtualDevices(actualDevicesMeasure)
+
+    fun updateVirtualDevicesMeasures(generatedMap: HashMap<String, DistanceInfo>) = rttMeasurer.updateVirtualDevicesMeasures(generatedMap)
+    fun getCurrentDistanceInfo() = rttMeasurer.getCurrentDistanceInfo()
+    fun updateCurrentDevice (pulseValue: Int, pulseOxValue: Int)= rttMeasurer.updateCurrentDevice(pulseValue, pulseOxValue)
 
     fun generateNormalPulse() = pulseMeasurer.generateNormalPulse()
     fun generateNormalPulseOx() = pulseMeasurer.generateNormalPulseOx()

@@ -15,7 +15,8 @@ import androidx.fragment.app.Fragment
 import com.samsung.sel.cqe.nova.R
 import com.samsung.sel.cqe.nova.main.utils.DistanceInfo
 
-class TableFragment(val tabsActivity: TabsActivity) : Fragment() {
+
+class TableFragment : Fragment() {
     private val table: TableLayout by lazy { view!!.findViewById<TableLayout>(R.id.tab_layout) }
     private var tableHeader: TableRow? = null
     override fun onCreateView(

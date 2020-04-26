@@ -12,7 +12,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 
-class PulseMeasurer(val novaController: NovaController?) {
+class PulseMeasurer(val novaController: NovaController) {
 
     companion object {
         const val PULSE_MAX = 80
@@ -27,20 +27,21 @@ class PulseMeasurer(val novaController: NovaController?) {
     }
 
     private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(3)
-    private var scheduledFuture: ScheduledFuture<*>? = null
-    var pulse = AtomicInteger()
-    var pulseOx = AtomicInteger()
+    private val scheduledFuture: ScheduledFuture<*>
+    private var pulse = AtomicInteger()
+    private var pulseOx = AtomicInteger()
 
     init {
-      if (novaController != null) scheduledFuture = executor.scheduleAtFixedRate({ generatePulseMeasures() }, 1, 3, TimeUnit.SECONDS)
-   }
+        scheduledFuture =
+            executor.scheduleAtFixedRate({ generatePulseMeasures() }, 1, 3, TimeUnit.SECONDS)
+    }
 
     fun generateNormalPulse() = Random.nextInt(PULSE_MIN, PULSE_MAX + 1)
     fun generateNormalPulseOx() = Random.nextInt(PULSEOX_MIN, PULSEOX_MAX + 1)
     fun generateAlarmPulse() = Random.nextInt(ALARM_PULSE_MIN, ALARM_PULSE_MAX + 1)
     fun generateAlarmPulseOx() = Random.nextInt(ALARM_PULSEOX_MIN, ALARM_PULSEOX_MAX + 1)
 
-    fun generatePulseMeasures() {
+    private fun generatePulseMeasures() {
         val pulseValue = generateNormalPulse()
         val pulseOxValue = generateNormalPulseOx()
         setPulseMeasures(pulseValue, pulseOxValue)
@@ -55,11 +56,13 @@ class PulseMeasurer(val novaController: NovaController?) {
     private fun setPulseMeasures(pulseValue: Int, pulseOxValue: Int) {
         pulse.set(pulseValue)
         pulseOx.set(pulseOxValue)
-        novaController?.setPulseInfoView(pulseValue, pulseOxValue)
+        novaController.updateCurrentDevice(pulseValue, pulseOxValue)
+        novaController.setPulseInfoView(pulseValue, pulseOxValue)
     }
 
-    fun startAlarm(){
-        scheduledFuture?.cancel(true)
+    fun startAlarm() {
+        scheduledFuture.cancel(true)
+        generateAlarmPulseMeasures()
         executor.scheduleAtFixedRate({ generateAlarmPulseMeasures() }, 0, 2, TimeUnit.SECONDS)
     }
 

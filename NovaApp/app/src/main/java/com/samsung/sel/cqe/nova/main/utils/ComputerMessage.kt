@@ -14,9 +14,9 @@ data class DistanceInfo(
     val phoneId: String,
     val phoneName: String,
     var distanceList: List<DistanceElement>,
-    var isAlarm: Boolean,
-    var pulse: Int,
-    var pulseOx: Int
+    val isAlarm: Boolean,
+    val pulse: Int,
+    val pulseOx: Int
 ) {
 
     constructor(distanceInfo: DistanceInfo, isAlarm: Boolean, pulse: Int, pulseOx: Int) : this(

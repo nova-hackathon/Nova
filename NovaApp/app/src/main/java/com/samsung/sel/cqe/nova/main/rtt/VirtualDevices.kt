@@ -1,41 +1,51 @@
 package com.samsung.sel.cqe.nova.main.rtt
 
 import com.samsung.sel.cqe.nova.main.controller.NovaController
-import com.samsung.sel.cqe.nova.main.pulse.PulseMeasurer
+import com.samsung.sel.cqe.nova.main.controller.PhoneInfo
 import com.samsung.sel.cqe.nova.main.utils.DistanceElement
 import com.samsung.sel.cqe.nova.main.utils.DistanceInfo
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ThreadLocalRandom
+import java.util.concurrent.TimeUnit
 
-class VirtualDevices(val pulseMeasurer: PulseMeasurer) {
+class VirtualDevices(
+    val nc: NovaController,
+    val phoneInfo: PhoneInfo
+) {
 
-    val mapGenerated = LinkedHashMap<String, DistanceInfo>()
+    private val mapGenerated = LinkedHashMap<String, DistanceInfo>()
+    private val executor: ScheduledExecutorService = Executors.newScheduledThreadPool(3)
+
+    init {
+          executor.scheduleAtFixedRate({ (generateVirtualDevices()) }, 1, 10, TimeUnit.SECONDS)
+    }
+
+    fun generateVirtualDevices(){
+        val generatedMap = getVirtualDevices()
+        nc.updateVirtualDevicesMeasures(generatedMap)
+    }
 
     private fun generateInitialList(actualDevicesMeasure: DistanceInfo?) {
+        val currentMeasure =
+            actualDevicesMeasure ?: nc.getCurrentDistanceInfo()
+
         mapGenerated.clear()
-        for (i in 3..50) {
-            val info = if (i != 45)
+        for (i in 1..DEVICE_COUNT_LOCAL) {
+            val info =
                 DistanceInfo(
-                    "${Companion.NAME_PREFIX} $i",
-                    "${Companion.NAME_PREFIX} $i",
+                    "${nc.phoneName} $i",
+                    "${nc.phoneName} $i",
                     ArrayList(),
                     false,
-                    pulseMeasurer.generateNormalPulse(),
-                    pulseMeasurer.generateNormalPulseOx()
-                )
-            else
-                DistanceInfo(
-                    "${Companion.NAME_PREFIX} $i",
-                    "${Companion.NAME_PREFIX} $i",
-                    ArrayList(),
-                    true,
-                    pulseMeasurer.generateAlarmPulse(),
-                    pulseMeasurer.generateAlarmPulseOx()
+                    nc.generateNormalPulse(),
+                    nc.generateNormalPulseOx()
                 )
             mapGenerated[info.phoneName] = info
         }
 
-        actualDevicesMeasure?.let {
-            mapGenerated[actualDevicesMeasure.phoneName] = actualDevicesMeasure
+        currentMeasure?.let {
+            mapGenerated[currentMeasure.phoneName] = currentMeasure
         }
         for (first in mapGenerated) {
             val distanceList = ArrayList<DistanceElement>()
@@ -56,14 +66,9 @@ class VirtualDevices(val pulseMeasurer: PulseMeasurer) {
         distanceInfo.distanceList.firstOrNull { it.phoneName == phoneName }?.distance
 
 
-    fun updateValues(alarmIndex: Int = -1) {
+    private fun updateValues() {
         mapGenerated.forEach { (_, map) ->
             val list = ArrayList<DistanceElement>()
-            if (map.phoneName.split(" ").equals(alarmIndex.toString())) {
-                map.isAlarm = true
-            }
-            map.pulse = pulseMeasurer.generateNormalPulse()
-            map.pulseOx = pulseMeasurer.generateNormalPulseOx()
             map.distanceList.forEach { (key, value) ->
                 val maxChange = (value * .05).toInt()
                 val change = ThreadLocalRandom.current().nextInt(0, maxChange + 1)
@@ -76,14 +81,18 @@ class VirtualDevices(val pulseMeasurer: PulseMeasurer) {
         }
     }
 
-    fun getVirtualDevices(actualDevicesMeasure: DistanceInfo?): LinkedHashMap<String, DistanceInfo> {
+    fun getVirtualDevices(actualDevicesMeasure: DistanceInfo? = null): LinkedHashMap<String, DistanceInfo> {
         generateInitialList(actualDevicesMeasure)
         updateValues()
         return mapGenerated
     }
 
+    fun close() {
+        executor.awaitTermination(1, TimeUnit.SECONDS)
+        executor.shutdownNow()
+    }
+
     companion object {
-        private const val NAME_PREFIX = "Patient"
         const val DEVICE_COUNT_LOCAL = 15
     }
 }

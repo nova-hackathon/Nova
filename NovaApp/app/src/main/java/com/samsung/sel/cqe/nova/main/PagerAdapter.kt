@@ -3,31 +3,19 @@ package com.samsung.sel.cqe.nova.main
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentManager
 import androidx.fragment.app.FragmentStatePagerAdapter
-import com.samsung.sel.cqe.nova.main.map.MapFragment
 
 class PagerAdapter(
     fragmentManager: FragmentManager
-    , val numOfTabs: Int, val tabsActivity: TabsActivity
-) : FragmentStatePagerAdapter(fragmentManager, numOfTabs) {
-
-    var tableFragment = TableFragment(tabsActivity)
-    var mapFragment = MapFragment(tabsActivity)
-    var novaFragment = NovaFragment(tabsActivity)
+    , val numOfTabs: Int
+) :
+    FragmentStatePagerAdapter(fragmentManager, numOfTabs) {
+    val tableFragment = TableFragment()
+    val novaFragment = NovaFragment(tableFragment)
 
     override fun getItem(position: Int): Fragment {
         return when (position) {
-            0 -> {
-                novaFragment = NovaFragment(tabsActivity)
-                novaFragment
-            }
-            1 -> {
-                tableFragment = TableFragment(tabsActivity)
-                tableFragment
-            }
-            else -> {
-                mapFragment = MapFragment(tabsActivity)
-                mapFragment
-            }
+            0 -> novaFragment
+            else -> tableFragment
         }
     }
 

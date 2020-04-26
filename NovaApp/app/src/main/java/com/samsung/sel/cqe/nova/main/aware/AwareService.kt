@@ -275,5 +275,5 @@ class AwareService(
         novaController.logClusterConnectionMap()
     }
 
-//    fun setDeviceCountView(deviceCount: Int) = novaController.setDeviceCountView(deviceCount)
+    fun setDeviceCountView(deviceCount: Int) = novaController.setDeviceCountView(deviceCount)
 }

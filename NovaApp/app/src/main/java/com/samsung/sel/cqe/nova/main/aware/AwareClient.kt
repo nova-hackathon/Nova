@@ -87,7 +87,7 @@ class AwareClient(
             if ((peersMap[header.phoneId]?.status != header.status || peersMap[header.phoneId]?.isAcceptsConnections != header.acceptsConnection) && header.status != PhoneStatus.CLOSING) {
                 peersMap[header.phoneId] = neighbourInfo
             }
-//            service.setDeviceCountView(peersMap.size)
+            service.setDeviceCountView(peersMap.size)
         }
 
     }
@@ -162,7 +162,7 @@ class AwareClient(
 
     override fun removePhone(phoneId: String): NeighbourInfo? {
         val peer = peersMap.remove(phoneId)
-//        service.setDeviceCountView(peersMap.size)
+        service.setDeviceCountView(peersMap.size)
         return peer
     }
 
