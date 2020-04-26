@@ -3,6 +3,7 @@ Main simulation module, it is responsible
 for graph, node, edge creation
 and simulation display
 """
+import datetime
 from itertools import zip_longest
 import logging
 import math
@@ -275,20 +276,26 @@ def path_onclick_wrapper(node_collection, node_value, graph):
 
 
 def show_saturation_history(coords, node_value):
-    data = [m.value for m in node_value.get_measurements('spo2')]
-    x_ticks = [m.timestamp for m in node_value.get_measurements('spo2')]
+    # just a random date for better display (time rather than numbers)
+    start = datetime.datetime(year=2020, month=4, day=26, hour=13, minute=17)
+
+    measurements = node_value.get_measurements('spo2')
+    data = [m.value for m in measurements]
+    x_ticks = [m.timestamp for m in measurements]
+    fake_times = [start + datetime.timedelta(seconds=3 * ts) for ts in x_ticks]
 
     fig, ax = plt.subplots()
 
     ax.axhline(90, ls='--', color='red')
     ax.axhline(95, ls='--', color='yellow')
 
-    ax.bar(x_ticks, data, color='royalblue')
+    ax.bar(x_ticks, data, color='royalblue', tick_label=[x.strftime("%H:%M:%S") for x in fake_times])
     ax.set_title(f"SpO2 of patient#{node_value.patient.id} against time")
     ax.set_ylabel("%")
     ax.set_ylim(50, 100)
     ax.yaxis.set_ticks(list(range(50, 110, 10)))
     ax.xaxis.set_ticks(x_ticks)
+    plt.xticks(rotation=45)
 
     plt.show()
 
