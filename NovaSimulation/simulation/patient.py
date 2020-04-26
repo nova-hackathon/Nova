@@ -17,7 +17,12 @@ EXCITED = {
 
 UNWELL = {
     'hr': (50, 70),
-    'spo2': (80, 94)
+    'spo2': (90, 94)
+}
+
+CRITICAL = {
+    'hr': (50, 70),
+    'spo2': (80, 89)
 }
 
 class Patient:

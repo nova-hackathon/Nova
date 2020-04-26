@@ -17,6 +17,7 @@ import numpy as np
 
 from device import Device, PatientDevice
 from patient import Patient
+import patient
 from distance import DistanceFile
 from geometry import get_intersection_of_two_circles, centroid
 from graph import create_nan_edges, create_socket_edges, scan_in_range, distance_map_plot
@@ -165,21 +166,68 @@ class MeasurementsViz(MeshViz):
     """
     Demonstrates mesh usage for monitoring health parameters of patients.
     """
+
+    SPO2_COLORS = [
+        (95, 100, (108, 150, 0), (0, 150, 40)),
+        (89, 95, (207, 0, 0), (219, 201, 0))
+    ]
     
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.mutator = Mutator(self.graph)
+        self.station = self.patientDevice = None
+        for node in self.graph:
+            if node.value == 287:
+                self.patientDevice = node
+                if self.station is not None:
+                    break
+            elif node.value == 1223:
+                self.station = node
+                if self.patientDevice is not None:
+                    break
+        self.step = 1
 
     def on_click(self, coords, node_value):
+        print("!!", node_value)
         show_saturation_history(coords, node_value)
+
+    def spo2_to_color(self, value):
+        if value > self.SPO2_COLORS[0][1]:
+            rgb = self.SPO2_COLORS[0][3]
+        elif value < self.SPO2_COLORS[-1][0]:
+            rgb = self.SPO2_COLORS[-1][2]
+        else:
+            for minV, maxV, minColor, maxColor in self.SPO2_COLORS:
+                if minV <= value <= maxV:
+                    factor = (value - minV) / (maxV - minV)
+                    rgb = tuple(
+                        (1 - factor) * minChannel + factor * maxChannel
+                        for minChannel, maxChannel in zip(minColor, maxColor)
+                    )
+                    break
+        return tuple(channel / 255 for channel in rgb)
 
     def __draw_nodes(self):
         self.mutator.tick()
         self.mutator.measure('spo2')
         self.draw_nodes(
+            filter_fun=lambda node: node not in (self.patientDevice, self.station),
             node_color=[
-                (0, (node.get_last_measurement('spo2').value - 75) / 25, 0) for node in self.graph
+                self.spo2_to_color(node.get_last_measurement('spo2').value)
+                for node in self.graph
+                if node not in (self.patientDevice, self.station)
             ]
+        )
+        self.draw_nodes(
+            nodelist=[self.patientDevice],
+            node_color=[self.spo2_to_color(self.patientDevice.get_last_measurement('spo2').value)],
+            node_size=self.default_node_size * 2
+        )
+        self.draw_nodes(
+            nodelist=[self.station],
+            node_color=[(0.2, 0.2, 0.2)],
+            node_shape="s",
+            node_size=self.default_node_size * 3
         )
 
     def draw(self):
@@ -192,7 +240,21 @@ class MeasurementsViz(MeshViz):
             alpha=0.7
         )
 
-    def redraw(self, **kwargs):
+    def redraw(self, elapsed_seconds, **kwargs):
+        if self.step == 3 and elapsed_seconds > 13:
+            #self.station.patient.condition = patient.CRITICAL
+            path_onclick_wrapper(
+                [self.patientDevice],
+                self.station,
+                self.nan_graph
+            )
+            self.step += 1
+        if self.step == 2 and elapsed_seconds > 12:
+            self.patientDevice.patient.condition = patient.CRITICAL
+            self.step += 1
+        if self.step == 1 and elapsed_seconds > 5:
+            self.patientDevice.patient.condition = patient.UNWELL
+            self.step += 1
         self.__draw_nodes()
 
 def path_onclick_wrapper(node_collection, node_value, graph):
