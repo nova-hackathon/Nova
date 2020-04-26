@@ -19,16 +19,16 @@ import java.net.ConnectException
 import java.net.Inet6Address
 import java.net.Socket
 
-class NovaSocketClient(val socketService: ClientSocketService, val connectedPhoneId: String) :
-    AwareSocket() {
+class NovaSocketClient(val socketService: IClientSocketService, val connectedPhoneId: String) :
+    NovaSocket() {
     override var socket: Socket? = null
     override var printWriter: PrintWriter? = null
     lateinit var network: Network
     lateinit var networkCapabilities: NetworkCapabilities
 
-    override fun onMessageReceived(message: String) {
+    override fun onMessageReceived(message: String): Boolean {
         Log.w(TAG, "client received message: $message")
-        socketService.processReceivedMessage(message)
+        return socketService.processReceivedMessage(message)
     }
 
     override fun createNetworkSpecifier(
@@ -43,15 +43,20 @@ class NovaSocketClient(val socketService: ClientSocketService, val connectedPhon
         val peerAwareInfo = networkCapabilities.transportInfo as WifiAwareNetworkInfo
         val peerIpv6 = peerAwareInfo.peerIpv6Addr
         val peerPort = peerAwareInfo.port
+        Log.w(TAG, "Create Socket")
+        Log.w(TAG, "PeerIpv6 $peerIpv6")
+        Log.w(TAG, "PeerPort $peerPort")
+
         if (socket == null) {
-            synchronized(lock) {
-                if (socket == null) {
-                    try {
+            try {
+                synchronized(lock) {
+                    if (socket == null) {
                         peerIpv6?.let { createSocketAndInitIO(it, peerPort) }
-                    } catch (ex: ConnectException) {
-                        socketService.onNetworkUnreachable()
                     }
                 }
+            } catch (ex: ConnectException) {
+                ex.printStackTrace()
+                socketService.onNetworkUnreachable(connectedPhoneId)
             }
         }
     }
@@ -59,10 +64,7 @@ class NovaSocketClient(val socketService: ClientSocketService, val connectedPhon
     private fun createSocketAndInitIO(inet6Address: Inet6Address, port: Int) {
         socket = network.socketFactory.createSocket(inet6Address, port)
         socket?.let { socket ->
-            socketService.showOnUiThread(
-                "Subscriber connection with ${socket.inetAddress}",
-                Toast.LENGTH_LONG
-            )
+            Log.w(TAG, "Subscriber connection with ${socket.inetAddress}")
             try {
                 printWriter = PrintWriter(socket.getOutputStream(), true)
             } catch (e: IOException) {
@@ -87,14 +89,17 @@ class NovaSocketClient(val socketService: ClientSocketService, val connectedPhon
             }
 
             override fun onUnavailable() {
-                Log.w(TAG, "Network unavailable $connectedPhoneId")
-                socketService.onNetworkUnreachable()
+                Log.w(TAG, "SocketClient onUnavailable $connectedPhoneId")
+                CoroutineScope(Dispatchers.Default).launch {
+                    socketService.onNetworkUnreachable(connectedPhoneId)
+                }
             }
 
             override fun onLost(network: Network) {
-                Log.w(TAG, "Network lost $connectedPhoneId")
-                socketService.onServerConnectionLost(connectedPhoneId)
-                socketService.stopPingMessages()
+                Log.w(TAG, "SocketClient onLost $connectedPhoneId")
+                CoroutineScope(Dispatchers.Default).launch {
+                    socketService.onServerConnectionLost(connectedPhoneId)
+                }
             }
         }
 }

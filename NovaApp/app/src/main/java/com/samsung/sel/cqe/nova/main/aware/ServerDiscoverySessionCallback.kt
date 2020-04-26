@@ -22,7 +22,7 @@ class ServerDiscoverySessionCallback(
     override fun onMessageReceived(peerHandle: PeerHandle, message: ByteArray) {
         val messageString = String(message)
         val gridMessage = convertMessageFromJson(messageString)
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.Default).launch {
             subscriberI.processServerMessage(gridMessage, peerHandle)
         }
     }
@@ -31,5 +31,11 @@ class ServerDiscoverySessionCallback(
     override fun onSessionConfigUpdated() {
         super.onSessionConfigUpdated()
         Log.w(TAG, "Publish config updated successfully")
+    }
+
+    override fun onSessionConfigFailed() {
+        super.onSessionConfigFailed()
+        Log.w(TAG, "Publish config failed")
+
     }
 }

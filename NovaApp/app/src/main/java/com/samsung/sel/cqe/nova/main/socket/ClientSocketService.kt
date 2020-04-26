@@ -1,14 +1,14 @@
 package com.samsung.sel.cqe.nova.main.socket
 
+import android.net.ConnectivityManager
 import android.net.wifi.aware.PeerHandle
 import android.net.wifi.aware.SubscribeDiscoverySession
 import android.util.Log
-import android.widget.Toast
-import com.samsung.sel.cqe.nova.main.NovaActivity
+import com.samsung.sel.cqe.nova.main.COMPUTER_COMMUNICATION_TAG
 import com.samsung.sel.cqe.nova.main.TAG
-import com.samsung.sel.cqe.nova.main.aware.*
-import com.samsung.sel.cqe.nova.main.controller.NovaController
 import com.samsung.sel.cqe.nova.main.controller.PhoneInfo
+import com.samsung.sel.cqe.nova.main.controller.PhoneStatus
+import com.samsung.sel.cqe.nova.main.structure.convertClusterInfoFromJson
 import com.samsung.sel.cqe.nova.main.utils.MessageType
 import com.samsung.sel.cqe.nova.main.utils.NovaMessage
 import com.samsung.sel.cqe.nova.main.utils.convertMessageFromJson
@@ -17,124 +17,161 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
+import com.samsung.sel.cqe.nova.main.socket.IClientSocketService as IClientSocketService
 
 class ClientSocketService(
-    val phoneInfo: PhoneInfo,
-    val view: NovaActivity,
-    val novaController: NovaController
-) {
+    private val phoneInfo: PhoneInfo,
+    private val socketService: SocketService
+) : IClientSocketService {
     private val isPingInProgress = AtomicBoolean(false)
     private val clientSocketsByServerId = ConcurrentHashMap<String, NovaSocketClient>()
-    private val serversQueue = LinkedBlockingQueue<String>()
 
-    fun processReceivedMessage(message: String) {
+    override fun processReceivedMessage(message: String): Boolean {
         val novaMessage: NovaMessage = convertMessageFromJson(message)
         when (novaMessage.type) {
-            MessageType.SYNC_CLOCK -> novaController.adjustTimeToMaster(novaMessage.content)
+            MessageType.SYNC_CLOCK ->
+                socketService.adjustTimeToMaster(novaMessage.content)
+            MessageType.STATUS_UPDATE ->
+                onUpdateStatusRequest(novaMessage.header.phoneId, novaMessage.content)
+            MessageType.MASTER_CLUSTER_INFO_UPDATE ->
+                socketService.updateMasterClusterInfo(
+                    convertClusterInfoFromJson(novaMessage.content)
+                )
+            MessageType.CLIENT_CLUSTER_INFO_UPDATE ->
+                socketService.updateClientClusterInfo(
+                    convertClusterInfoFromJson(novaMessage.content)
+                )
+            MessageType.CLUSTER_CONNECTION_LOST ->
+                socketService.removeFromClusterConnectionMap(novaMessage.header.phoneId)
+            MessageType.RTT_INIT ->
+                socketService.onRttUpdate(
+                    novaMessage.content, novaMessage.header.phoneId, novaMessage.header.status
+                )
+            MessageType.RTT_BROADCAST ->
+                socketService.onRttBroadcast(
+                    novaMessage.content, novaMessage.header.phoneId, novaMessage.header.status
+                )
+            MessageType.RTT_REQUEST -> {
+                phoneInfo.clusterInfo.state.onRttRequest()
+                return true
+            }
+            else -> Log.w(TAG, "Unexpected message type ${novaMessage.type}")
         }
+        return false
     }
 
-    fun requestSocketConnectionToServer(
+    private fun onUpdateStatusRequest(serverId: String, content: String) {
+        val currentStatus = phoneInfo.status
+        if (isCanSendChangeRoleMessage(serverId, currentStatus)) {
+            val msg = NovaMessage(
+                MessageType.CLIENT_ACCEPTS_CHANGE_ROLE, currentStatus.toString(), phoneInfo
+            )
+            Log.w(
+                TAG,
+                "Sending CLIENT_ACCEPTS_CHANGE_ROLE to ${socketService.getAwareInfoByID(serverId)?.phoneName}"
+            )
+            sendMessageToServer(serverId, msg)
+        }
+        socketService.updateStatus(PhoneStatus.valueOf(content))
+    }
+
+    private fun isCanSendChangeRoleMessage(serverId: String, currentStatus: PhoneStatus): Boolean =
+        serverId == phoneInfo.masterId &&
+                (currentStatus == PhoneStatus.CLIENT_OUT || currentStatus == PhoneStatus.CLIENT_IN)
+
+    override fun requestSocketConnectionToServer(
         peerHandle: PeerHandle,
         serverPhoneId: String,
-        subscribeSession: SubscribeDiscoverySession
+        subscribeSession: SubscribeDiscoverySession,
+        connMgr: ConnectivityManager
     ) {
-        Log.w(TAG, "creating client socket $peerHandle")
-        val connMgr = novaController.connectivityManager
         val clientSocket = NovaSocketClient(this, serverPhoneId)
         clientSocket.requestNetwork(-1, peerHandle, subscribeSession, connMgr)
     }
 
-    private fun startPingMessages() {
+    private fun startPingMessages(serverId: String) {
         CoroutineScope(Dispatchers.IO).launch {
             while (isPingInProgress.get()) {
-                sendPingMessage()
+                sendPingMessage(serverId)
                 delay(50_000)
             }
         }
     }
 
-    fun stopPingMessages() = isPingInProgress.set(false)
+    override fun stopPingMessages() = isPingInProgress.set(false)
 
-    private fun sendPingMessage() {
-        val serverSocket = clientSocketsByServerId[phoneInfo.masterId]
-        val msg = NovaMessage(
-            MessageType.PING,
-            NovaMessage.EMPTY_CONTENT,
-            phoneInfo
-        )
-        serverSocket?.sendMessage(msg)
+    private fun sendPingMessage(serverId: String) {
+        val msg = NovaMessage(MessageType.PING, NovaMessage.EMPTY_CONTENT, phoneInfo)
+        sendMessageToServer(serverId, msg)
     }
 
-    fun onNewServerConnected(serverId: String, serverSocket: NovaSocketClient) {
+    override fun onNewServerConnected(serverId: String, clientSocket: NovaSocketClient) {
         Log.w(TAG, "Add new server $serverId")
-        clientSocketsByServerId[serverId] = serverSocket
-        view.appendToServerTextField("server $serverId ${novaController.getAwareInfoByID(serverId)?.phoneName}")
-        if (phoneInfo.masterId == "") {
-            novaController.changeMaster(serverId)
-            novaController.syncTimeWithMaster()
-            isPingInProgress.set(true)
-            startPingMessages()
+        clientSocketsByServerId[serverId] = clientSocket
+        if (phoneInfo.masterId.isEmpty() || phoneInfo.status == PhoneStatus.RTT_FINISHED) {
+            socketService.changeMaster(serverId)
+            requestStatusUpdateFromServer(serverId)
+            socketService.syncTimeWithMaster(getFirstSocketToServer())
+        }
+        if (socketService.getAwareInfoByID(serverId)?.status == PhoneStatus.CLIENT_IN) {
+            socketService.changeStatus(PhoneStatus.CLIENT_OUT)
+        }
+        sendRttUpdateToServer(serverId)
+        isPingInProgress.set(true)
+        startPingMessages(serverId)
+    }
+
+    private fun requestStatusUpdateFromServer(serverId: String) {
+        val msg = NovaMessage(MessageType.REQUEST_STATUS, NovaMessage.EMPTY_CONTENT, phoneInfo)
+        sendMessageToServer(serverId, msg)
+    }
+
+    private fun sendRttUpdateToServer(serverId: String) {
+        val rttMessage =
+            NovaMessage(MessageType.RTT_INIT, socketService.getRttResultsMap(), phoneInfo)
+        sendMessageToServer(serverId, rttMessage)
+    }
+
+    override fun sendRttUpdateToServers(senderIdToOmit: String, rttMessage: NovaMessage) {
+        clientSocketsByServerId.forEachKey(1) {
+            if (it != senderIdToOmit) sendMessageToServer(it, rttMessage)
         }
     }
 
-    fun getFirstMapValue() = clientSocketsByServerId.entries.first().value
+    private fun getFirstSocketToServer() = clientSocketsByServerId.entries.first().value
 
-    fun onServerConnectionLost(serverId: String) {
-        novaController.onMasterLost()
-        serversQueue.clear()
-        novaController.removeServerByID(serverId)
-        serversQueue.addAll(novaController.getMastersIds())
-        novaController.startAnalysis()
-    }
-
-    fun onNetworkUnreachable() {
-        view.showOnUiThread("Network is unreachable", Toast.LENGTH_LONG)
-        chooseNewServer()
-    }
-
-    fun chooseNewServer() {
-        var serverId: String = serversQueue.poll() ?: "-1"
-        var serverInfo: NeighbourInfo? = novaController.getAwareInfoByID(serverId)
-        while ((serverInfo?.isAcceptsConnections == false && serversQueue.isNotEmpty())) {
-            Log.w(
-                TAG,
-                "While Server accepts connection status: ${serverInfo?.isAcceptsConnections} ${serverInfo?.phoneName}"
-            )
-            serverId = serversQueue.poll() ?: "-1"
-            serverInfo = novaController.getAwareInfoByID(serverId)
-        }
-
+    override fun onServerConnectionLost(serverId: String) {
+        stopPingMessages()
         Log.w(
-            TAG,
-            "Server accepts connection status: ${serverInfo?.isAcceptsConnections} ${serverInfo?.phoneName}"
+            COMPUTER_COMMUNICATION_TAG,
+            "Server ${socketService.getAwareInfoByID(serverId)?.phoneName} lost"
         )
-        if (serverInfo?.isAcceptsConnections == true) {
-            novaController.requestNewClientConnection(serverInfo.peer, serverId)
-        } else {
-            novaController.requestNextConnection()
-        }
+        phoneInfo.clusterInfo.state.onServerLost()
 
     }
 
-    fun isQueueNotEmpty() = serversQueue.isNotEmpty()
-    fun clearServersQueue() = serversQueue.clear()
 
-    fun addToServersQueue(phoneId: String){
-        serversQueue.add(phoneId)
+    override suspend fun onNetworkUnreachable(serverPhoneId: String) {
+        socketService.onClientNetworkUnreachable(serverPhoneId)
     }
 
-    fun removeFromServersQueue(phoneId: String){
-        serversQueue.remove(phoneId)
+
+    override fun sendMessageToServer(senderId: String, msg: NovaMessage) {
+        clientSocketsByServerId[senderId]?.sendMessage(msg)
     }
 
-    fun close() {
+
+    override fun close() {
         clientSocketsByServerId.forEach { (_, u) -> u.onDestroy() }
     }
 
-    fun showOnUiThread(message: String, duration: Int) =
-        view.showOnUiThread(message, duration)
+    override fun showOnUiThread(message: String, duration: Int) =
+        socketService.showOnUiThread(message, duration)
+
+    override fun getClientSockets(): ConcurrentHashMap<String, NovaSocket> =
+        clientSocketsByServerId as ConcurrentHashMap<String, NovaSocket>
+
+    override fun removeClientSocket(serverId: String) = clientSocketsByServerId.remove(serverId)
 
 }

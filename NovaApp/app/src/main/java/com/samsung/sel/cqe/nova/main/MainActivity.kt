@@ -16,12 +16,11 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         val aware = findViewById<Button>(R.id.launch_btn)
         aware.setOnClickListener {
-            startActivity(Intent(this, NovaActivity::class.java))
+            startActivity(Intent(this, TabsActivity::class.java))
         }
         hasWifiAware = packageManager.hasSystemFeature(PackageManager.FEATURE_WIFI_AWARE)
         androidId = Settings.Secure.getString(this.contentResolver, Settings.Secure.ANDROID_ID)
     }
-
     companion object {
         @JvmStatic
         var hasWifiAware = false

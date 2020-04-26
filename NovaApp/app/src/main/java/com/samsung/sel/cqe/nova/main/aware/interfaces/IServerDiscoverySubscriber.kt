@@ -6,5 +6,5 @@ import com.samsung.sel.cqe.nova.main.utils.NovaMessage
 
 interface IServerDiscoverySubscriber {
     fun setPublishSession(publishSession: PublishDiscoverySession)
-    fun processServerMessage(novaMessage: NovaMessage, peerHandle: PeerHandle)
+    suspend fun processServerMessage(novaMessage: NovaMessage, peerHandle: PeerHandle)
 }

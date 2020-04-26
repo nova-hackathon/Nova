@@ -20,7 +20,8 @@ class NovaSync(
 ) {
 
     var stopWatchStartTime = System.currentTimeMillis()
-    var timerScheduledExecutor: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
+    var timerScheduledExecutor: ScheduledExecutorService =
+        Executors.newSingleThreadScheduledExecutor()
 
 
     init {
@@ -56,29 +57,26 @@ class NovaSync(
         )
     }
 
-fun adjustStartTimeUsingMsg(msg: String) {
-    Log.w(
-        TAG,
-        "${System.currentTimeMillis()} obtain sync response:${LocalDateTime.now()}"
-    )
-    try {
-        val contentSplit = msg.split(SYNC_MSG_SEP)
-        val sendRequestTime = contentSplit[0].toLong()
-        val timeValue = contentSplit[1].toLong()
-        val oneWaySendinDuration = (System.currentTimeMillis() - sendRequestTime) / 2
-        stopWatchStartTime = System.currentTimeMillis() - timeValue - oneWaySendinDuration
-        Log.w(TAG, "adjustStartTimeUsingMsg(): $msg")
-        writeTimesToLogs()
-    } catch (e: Exception) {
-        Log.e(TAG, "failed to adjust time with msg: $msg", e)
+    fun adjustStartTimeUsingMsg(msg: String) {
+        Log.w(
+            TAG,
+            "${System.currentTimeMillis()} obtain sync response:${LocalDateTime.now()}"
+        )
+        try {
+            val contentSplit = msg.split(SYNC_MSG_SEP)
+            val sendRequestTime = contentSplit[0].toLong()
+            val timeValue = contentSplit[1].toLong()
+            val oneWaySendinDuration = (System.currentTimeMillis() - sendRequestTime) / 2
+            stopWatchStartTime = System.currentTimeMillis() - timeValue - oneWaySendinDuration
+            Log.w(TAG, "adjustStartTimeUsingMsg(): $msg")
+            writeTimesToLogs()
+        } catch (e: Exception) {
+            Log.e(TAG, "failed to adjust time with msg: $msg", e)
+        }
     }
-}
 
-fun close() {
-    try {
+    fun close() {
         timerScheduledExecutor.awaitTermination(10, TimeUnit.MILLISECONDS)
         timerScheduledExecutor.shutdownNow()
-    } catch (e: Exception) {
     }
-}
 }

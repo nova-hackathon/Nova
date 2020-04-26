@@ -13,8 +13,22 @@ data class DistanceElement(val phoneName: String, val distance: Int)
 data class DistanceInfo(
     val phoneId: String,
     val phoneName: String,
-    val distanceList: List<DistanceElement>
-)
+    var distanceList: List<DistanceElement>,
+    var isAlarm: Boolean,
+    var pulse: Int,
+    var pulseOx: Int
+) {
+
+    constructor(distanceInfo: DistanceInfo, isAlarm: Boolean, pulse: Int, pulseOx: Int) : this(
+        distanceInfo.phoneId,
+        distanceInfo.phoneName,
+        distanceInfo.distanceList,
+        isAlarm, pulse, pulseOx
+    )
+
+    fun getDistanceToPhoneByNameOrDefault(phoneName: String, default: Int = -1) =
+        distanceList.find { it.phoneName == phoneName }?.distance ?: default
+}
 
 @Throws(JsonSyntaxException::class)
 fun convertComputerMessageFromJson(message: String): ComputerMessage {
@@ -26,10 +40,10 @@ fun convertComputerMessageToJsonString(message: ComputerMessage): String {
 }
 
 @Throws(JsonSyntaxException::class)
-fun convertDistanceFromJson(message: String): DistanceInfo {
+fun convertDistanceInfoFromJson(message: String): DistanceInfo {
     return Gson().fromJson(message, DistanceInfo::class.java)
 }
 
-fun convertDistanceToJsonString(message: DistanceInfo): String {
+fun convertDistanceInfoToJsonString(message: DistanceInfo): String {
     return Gson().toJson(message)
 }

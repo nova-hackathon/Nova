@@ -4,31 +4,23 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.wifi.aware.DiscoverySession
 import android.net.wifi.aware.PeerHandle
-import android.net.wifi.aware.PublishDiscoverySession
 import android.net.wifi.aware.WifiAwareNetworkSpecifier
 import android.util.Log
 import android.widget.Toast
 import com.samsung.sel.cqe.nova.main.TAG
-import com.samsung.sel.cqe.nova.main.utils.MessageType
-import com.samsung.sel.cqe.nova.main.utils.NovaMessage
-import com.samsung.sel.cqe.nova.main.utils.convertMessageFromJson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.PrintWriter
 import java.net.ServerSocket
 import java.net.Socket
-import java.time.LocalDateTime
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 
 class NovaServerSocket(
-    val socketService: ServerSocketService,
-    val port: Int,
+    val socketService: IServerSocketService,
+    port: Int,
     val connectedPhoneId: String
-) : AwareSocket() {
+) : NovaSocket() {
     override var socket: Socket? = null
     override var printWriter: PrintWriter? = null
     val isAlreadyFinishedRequest: AtomicBoolean = AtomicBoolean(false)
@@ -44,21 +36,24 @@ class NovaServerSocket(
         .build()
 
     override suspend fun createSocket() {
+        Log.w(TAG, "Creating Server Socket")
         socket = serverSocket.accept()
+        Log.w(TAG, "Server Socket Created")
         socket?.let { socket ->
-            socketService.showOnUiThread(
-                "Publisher connection with ${socket.inetAddress}",
-                Toast.LENGTH_LONG
-            )
             initSocketListener()
             printWriter = PrintWriter(socket.getOutputStream(), true)
             socketService.onNewClientConnected(connectedPhoneId, this)
         }
     }
 
-    override fun onMessageReceived(message: String) {
+    override fun close() {
+        super.close()
+        serverSocket.close()
+    }
+
+    override fun onMessageReceived(message: String): Boolean {
         Log.w(TAG, "server received message: $message")
-        socketService.processReceivedMessage(message)
+        return socketService.processReceivedMessage(message)
     }
 
     override fun createNetworkCallback(discoverySession: DiscoverySession) =
@@ -80,7 +75,8 @@ class NovaServerSocket(
             }
 
             override fun onUnavailable() {
-                Log.w(TAG, "Network unavailable $connectedPhoneId")
+                Log.w(TAG, "Network unavailable on server side $connectedPhoneId")
+                socketService.onNetworkUnavailable(connectedPhoneId)
                 if (!isAlreadyFinishedRequest.get()) {
                     socketService.onRequestFinished()
                     isAlreadyFinishedRequest.set(true)
@@ -88,8 +84,8 @@ class NovaServerSocket(
             }
 
             override fun onLost(network: Network) {
-                Log.w(TAG, "Network lost $connectedPhoneId")
-                socketService.onClientConnectionLost()
+                Log.w(TAG, "ServerSocket onLost $connectedPhoneId")
+                socketService.onClientConnectionLost(connectedPhoneId)
             }
         }
 

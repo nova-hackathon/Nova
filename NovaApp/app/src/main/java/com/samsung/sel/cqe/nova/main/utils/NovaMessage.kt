@@ -2,15 +2,14 @@ package com.samsung.sel.cqe.nova.main.utils
 
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
-import com.samsung.sel.cqe.nova.main.aware.PhoneStatus
 import com.samsung.sel.cqe.nova.main.controller.PhoneInfo
+import com.samsung.sel.cqe.nova.main.controller.PhoneStatus
 
 data class NovaMessage(
     val type: MessageType,
     val content: String,
     val header: NovaMessageHeader
 ) {
-    val senderId = header.phoneId
 
     companion object {
         const val EMPTY_CONTENT = ""
@@ -24,15 +23,17 @@ data class NovaMessage(
 
 data class NovaMessageHeader(
     val phoneId: String,
+    val masterId: String,
     val acceptsConnection: Boolean,
     val masterRank: Int,
     val MAC: String,
     val phoneName: String,
-    val status: PhoneStatus
+    val status: PhoneStatus,
+    val isMaster: Boolean
 ) {
     constructor(phoneInfo: PhoneInfo) : this(
-        phoneInfo.phoneID, phoneInfo.acceptsConnection, phoneInfo.masterRank,
-        phoneInfo.macAddress.toString(), phoneInfo.phoneName, phoneInfo.status
+        phoneInfo.phoneID, phoneInfo.masterId, phoneInfo.acceptsConnection, phoneInfo.masterRank,
+        phoneInfo.macAddress.toString(), phoneInfo.phoneName, phoneInfo.status, phoneInfo.isMaster
     )
 }
 
@@ -63,5 +64,5 @@ fun convertMessageHeaderToJsonString(message: NovaMessageHeader): String {
 }
 
 enum class MessageType {
-    PING, REQUEST_SOCKET, REJECT_CONNECTION, ACCEPT_CONNECTION, SYNC_CLOCK, SYNC_REQUEST
+    PING, REQUEST_SOCKET, REJECT_CONNECTION, ACCEPT_CONNECTION, SYNC_CLOCK, SYNC_REQUEST, STATUS_UPDATE, ACCEPT_CLUSTER_CONNECTION, REQUEST_CLUSTER_SOCKET, MASTER_CLUSTER_INFO_UPDATE, REQUEST_STATUS, CLIENT_CLUSTER_INFO_UPDATE, NEW_CLUSTER_CONNECTION_ESTABLISHED, CLUSTER_CONNECTION_LOST, CLIENT_ACCEPTS_CHANGE_ROLE, RTT_INIT, RTT_BROADCAST, RTT_REQUEST
 }
