@@ -1,0 +1,6 @@
+NovaApp/local.properties
+NovaApp/.gradle/
+*.iml
+NovaApp/build/
+NovaApp/.idea/
+NovaApp/app/src/main/res/values/localStrings.xml

@@ -1,0 +1,11 @@
+# General
+.idea
+.venv
+.vscode
+*.log
+
+# extensions
+*.pyc
+*/__pycache__/*
+
+random.txt

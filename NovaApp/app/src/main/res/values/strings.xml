@@ -1,0 +1,23 @@
+<resources>
+    <string name="app_name">NovaApp</string>
+    <string name="send_message">Send Message</string>
+    <string name="launch">Launch</string>
+    <string name="publish_service">Publish Service</string>
+    <string name="subscribe_service">Subscribe Service</string>
+    <string name="start_aware">Start Aware</string>
+    <string name="start_synchro">Start Synchro</string>
+    <string name="start_socket">Start Socket</string>
+    <string name="request_client">Reuqest Client</string>
+    <string name="send_server">Send server</string>
+    <string name="client_send">Client send</string>
+    <string name="client_read">Client Read</string>
+    <string name="idPrompt">id:</string>
+    <string name="fireFlyName">fireFly</string>
+    <string name="rttBtnText" >RTT</string>
+    <string name="SendMsgBtnTxt">Send to all</string>
+    <string name="reInitAwareBtnTxt">reInit</string>
+    <string name="ffAllBtnTxt">fireFly to all</string>
+    <string name="ffRttBtnTxt">rtt fireFly</string>
+    <string name="ffNotRttBtnTxt">no rtt fireFly</string>
+    <string name="beepBtnTxt">beep</string>
+</resources>
